@@ -790,65 +790,31 @@ def ghostnetv3(**kwargs):
     ]
     return GhostNet(cfgs, num_classes=1000, width=kwargs['width'], dropout=0.2)
 
-def setup_seed(seed):
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-    torch.backends.cudnn.deterministic = True
-
-def export_weight(model):
+def export_model(model):
     current_path = os.path.dirname(__file__)
-    f = open(current_path + "ghostnetv3.weights", 'w')
-    f.write("{}\n".format(len(model.state_dict().keys())))
+    torch.save(model.state_dict(), os.path.join(current_path, "ghostnetv3.pth"))
+    print("Model saved as ghostnetv3.pth")
 
-    for k, v in model.state_dict().items():
-        print('exporting ... {}: {}'.format(k, v.shape))
 
-        vr = v.reshape(-1).cpu().numpy()
-        f.write("{} {}".format(k, len(vr)))
-        for vv in vr:
-            f.write(" ")
-            f.write(struct.pack(">f", float(vv)).hex())
-        f.write("\n")
-
-    f.close()
-
-def export_onnx(input, model):
+def export_onnx_model(input_tensor, model):
     current_path = os.path.dirname(__file__)
-    file = current_path + "ghostnetv3.onnx"
+    file = os.path.join(current_path, "ghostnetv3.onnx")
     torch.onnx.export(
-        model=model, 
-        args=(input,),
+        model=model,
+        args=(input_tensor,),
         f=file,
-        input_names=["input0"],
-        output_names=["output0"],
+        input_names=["input"],
+        output_names=["output"],
         opset_version=13
     )
-    print("Finished ONNX export")
+    print("ONNX model exported as ghostnetv3.onnx")
 
-    model_onnx = onnx.load(file)
-    onnx.checker.check_model(model_onnx)
-
-    print(f"Simplifying with onnx-simplifier {onnxsim.__version__}...")
-    model_onnx, check = onnxsim.simplify(model_onnx)
-    assert check, "Simplification check failed"
-    onnx.save(model_onnx, file)
-
-def eval_model(input, model):
-    output = model(input)
-    print("------from inference------")
-    print(input)
-    print(output)
 
 if __name__ == "__main__":
-    setup_seed(1)
-    
     model = ghostnetv3(width=1.0)
     model.eval()
-    
-    input = torch.randn(32, 3, 320, 256)
 
-    export_weight(model)
+    export_model(model)
 
-    export_onnx(input, model)
-
-    eval_model(input, model)
+    input_tensor = torch.randn(1, 3, 224, 224)
+    export_onnx_model(input_tensor, model)
